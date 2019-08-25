@@ -1,4 +1,4 @@
-module chromecast_jukebox
+module github.com/toxygene/chromecast-jukebox
 
 require (
 	github.com/davecgh/go-spew v1.1.1

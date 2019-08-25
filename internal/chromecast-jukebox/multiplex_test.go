@@ -1,10 +1,11 @@
 package chromecast_jukebox
 
 import (
-	cast_channel "chromecast_jukebox/internal/cast-channel"
-	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 func TestMultiplex(t *testing.T) {
@@ -36,10 +37,10 @@ func TestMultiplex(t *testing.T) {
 	}()
 
 	go func() {
-		rcm1 := <- toChromecastChannel
+		rcm1 := <-toChromecastChannel
 		assert.Equal(t, &cm1, rcm1)
 
-		rcm2 := <- toChromecastChannel
+		rcm2 := <-toChromecastChannel
 		assert.Equal(t, &cm2, rcm2)
 
 		wg.Done()

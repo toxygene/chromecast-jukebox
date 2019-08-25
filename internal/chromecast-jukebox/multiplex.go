@@ -1,8 +1,8 @@
 package chromecast_jukebox
 
 import (
-	cast_channel "chromecast_jukebox/internal/cast-channel"
 	"github.com/pkg/errors"
+	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 	"gopkg.in/tomb.v2"
 )
 
@@ -12,7 +12,7 @@ func Multiplex(toChromecastChannel chan<- *cast_channel.CastMessage, fromControl
 	for _, fromControllerChannel := range fromControllerChannels {
 		func(fromControllerChannel <-chan *cast_channel.CastMessage) {
 			tb.Go(func() error {
-				cm, ok := <- fromControllerChannel
+				cm, ok := <-fromControllerChannel
 				if ok {
 					toChromecastChannel <- cm
 				}

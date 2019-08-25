@@ -1,12 +1,13 @@
 package chromecast_jukebox
 
 import (
-	cast_channel "chromecast_jukebox/internal/cast-channel"
 	"encoding/binary"
 	"encoding/json"
+	"io"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"io"
+	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 func WriteCastMessage(w io.Writer, message *cast_channel.CastMessage) error {

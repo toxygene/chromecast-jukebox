@@ -1,9 +1,10 @@
 package chromecast_jukebox
 
 import (
-	cast_channel "chromecast_jukebox/internal/cast-channel"
 	"sync"
 	"testing"
+
+	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 
 	"github.com/stretchr/testify/assert"
 )
