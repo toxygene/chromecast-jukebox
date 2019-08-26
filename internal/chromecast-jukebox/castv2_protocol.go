@@ -7,9 +7,10 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
+// WriteCastMessage writes a Chromecast CastMessage to a writer
 func WriteCastMessage(w io.Writer, message *castchannel.CastMessage) error {
 	b, err := proto.Marshal(message)
 
@@ -30,6 +31,7 @@ func WriteCastMessage(w io.Writer, message *castchannel.CastMessage) error {
 	return nil
 }
 
+// ReadCastMessage reads a Chromecast CastMessage from a reader
 func ReadCastMessage(r io.Reader) (*castchannel.CastMessage, error) {
 	var expectedMessageLength uint32
 
@@ -62,6 +64,7 @@ func ReadCastMessage(r io.Reader) (*castchannel.CastMessage, error) {
 	return nil, nil
 }
 
+// GetCastMessagePayload unmarshals the payload of a CastMessage to a map[string]string
 func GetCastMessagePayload(cm *castchannel.CastMessage, payload *map[string]string) error {
 	if err := json.Unmarshal([]byte(*cm.PayloadUtf8), payload); err != nil {
 		return errors.Wrap(err, "unmarshal payload failed")

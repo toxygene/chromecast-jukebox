@@ -5,7 +5,7 @@ import (
 
 	"github.com/oklog/run"
 
-	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 
 	"github.com/pkg/errors"
 )
@@ -14,12 +14,14 @@ var (
 	pingNamespace = "urn:cast-cast:com.google.cast.tp.heartbeat"
 )
 
+// ChromecastPingController handles the ping/pong operations for a Chromecast communication session
 type ChromecastPingController struct {
 	pingTimer *time.Timer
 	reader    chan *castchannel.CastMessage
 	writer    chan *castchannel.CastMessage
 }
 
+// NewChromecastPingController constructs a ChromecastPingController, using the supplied channels for reading from and writing to the Chromecast
 func NewChromecastPingController(r chan *castchannel.CastMessage, w chan *castchannel.CastMessage) *ChromecastPingController {
 	return &ChromecastPingController{
 		pingTimer: time.NewTimer(5 * time.Second),
@@ -28,10 +30,12 @@ func NewChromecastPingController(r chan *castchannel.CastMessage, w chan *castch
 	}
 }
 
+// GetChannels returns the controllers read from and write to Chromecast channels
 func (t *ChromecastPingController) GetChannels() (<-chan *castchannel.CastMessage, chan<- *castchannel.CastMessage) {
 	return t.reader, t.writer
 }
 
+// Close closes the read from and write to Chromecast channels
 func (t *ChromecastPingController) Close() error {
 	close(t.reader)
 	close(t.writer)
@@ -39,6 +43,7 @@ func (t *ChromecastPingController) Close() error {
 	return nil
 }
 
+// Run causes the controller to listen for PING and PONG payloads and periodicly sends PING payloads to the Chromecast
 func (t *ChromecastPingController) Run() error {
 	g := run.Group{}
 
@@ -84,6 +89,7 @@ func (t *ChromecastPingController) Run() error {
 	return nil
 }
 
+// Ping sends a PING payload to the Chromecast
 func (t *ChromecastPingController) Ping() error {
 	payload := `{"type": "PING"}`
 
@@ -101,6 +107,7 @@ func (t *ChromecastPingController) Ping() error {
 	return nil
 }
 
+// Pong sends a PONG payload to the Chromecast
 func (t *ChromecastPingController) Pong() error {
 	payload := `{"type": "PONG"}`
 
