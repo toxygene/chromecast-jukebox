@@ -2,12 +2,13 @@ package chromecastjukebox
 
 import (
 	"io"
+	"sync"
 
-	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/oklog/run"
+	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/tomb.v2"
 )
 
 var (
@@ -33,14 +34,23 @@ func NewChromecast(connection io.ReadWriteCloser, logEntry *logrus.Entry) *Chrom
 	return &c
 }
 
-func (t *Chromecast) Run() error {
-	tb := tomb.Tomb{}
+func (t *Chromecast) Close() error {
+	if err := t.connection.Close(); err != nil {
+		return errors.Wrap(err, "")
+	}
 
+	return nil
+}
+
+func (t *Chromecast) Run() error {
+	g := run.Group{}
+
+	writeLock := sync.Mutex{}
 	for _, c := range t.controllers {
 		toChromecastChannel, _ := c.GetChannels()
 
 		func(toChromecastChannel <-chan *castchannel.CastMessage) {
-			tb.Go(func() error {
+			g.Add(func() error {
 				for {
 					cm, ok := <-toChromecastChannel
 
@@ -48,17 +58,22 @@ func (t *Chromecast) Run() error {
 						return nil
 					}
 
-					// todo exclusive write lock needed here
+					writeLock.Lock()
 
 					if err := WriteCastMessage(t.connection, cm); err != nil {
+						writeLock.Unlock()
 						return errors.Wrap(err, "")
 					}
+
+					writeLock.Unlock()
 				}
+			}, func(error) {
+				c.Close()
 			})
 		}(toChromecastChannel)
 	}
 
-	tb.Go(func() error {
+	g.Add(func() error {
 		for {
 			cm, err := ReadCastMessage(t.connection)
 
@@ -74,9 +89,11 @@ func (t *Chromecast) Run() error {
 				}(c)
 			}
 		}
+	}, func(error) {
+		t.Close()
 	})
 
-	if err := tb.Wait(); err != nil {
+	if err := g.Run(); err != nil {
 		return errors.Wrap(err, "")
 	}
 
