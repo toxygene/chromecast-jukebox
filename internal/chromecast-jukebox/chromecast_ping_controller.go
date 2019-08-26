@@ -1,12 +1,13 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
 	"time"
 
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/oklog/run"
+
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 
 	"github.com/pkg/errors"
-	"gopkg.in/tomb.v2"
 )
 
 var (
@@ -15,11 +16,11 @@ var (
 
 type ChromecastPingController struct {
 	pingTimer *time.Timer
-	reader    chan *cast_channel.CastMessage
-	writer    chan *cast_channel.CastMessage
+	reader    chan *castchannel.CastMessage
+	writer    chan *castchannel.CastMessage
 }
 
-func NewChromecastPingController(r chan *cast_channel.CastMessage, w chan *cast_channel.CastMessage) *ChromecastPingController {
+func NewChromecastPingController(r chan *castchannel.CastMessage, w chan *castchannel.CastMessage) *ChromecastPingController {
 	return &ChromecastPingController{
 		pingTimer: time.NewTimer(5 * time.Second),
 		reader:    r,
@@ -27,7 +28,7 @@ func NewChromecastPingController(r chan *cast_channel.CastMessage, w chan *cast_
 	}
 }
 
-func (t *ChromecastPingController) GetChannels() (<-chan *cast_channel.CastMessage, chan<- *cast_channel.CastMessage) {
+func (t *ChromecastPingController) GetChannels() (<-chan *castchannel.CastMessage, chan<- *castchannel.CastMessage) {
 	return t.reader, t.writer
 }
 
@@ -39,9 +40,9 @@ func (t *ChromecastPingController) Close() error {
 }
 
 func (t *ChromecastPingController) Run() error {
-	tb := tomb.Tomb{}
+	g := run.Group{}
 
-	tb.Go(func() error {
+	g.Add(func() error {
 		for {
 			cm, ok := <-t.reader
 			if !ok {
@@ -60,9 +61,11 @@ func (t *ChromecastPingController) Run() error {
 				}
 			}
 		}
+	}, func(error) {
+		close(t.reader)
 	})
 
-	tb.Go(func() error {
+	g.Add(func() error {
 		for {
 			<-t.pingTimer.C
 
@@ -70,9 +73,11 @@ func (t *ChromecastPingController) Run() error {
 				return errors.Wrap(err, "")
 			}
 		}
+	}, func(error) {
+		t.pingTimer.Stop()
 	})
 
-	if err := tb.Wait(); err != nil {
+	if err := g.Run(); err != nil {
 		return errors.Wrap(err, "")
 	}
 
@@ -82,12 +87,12 @@ func (t *ChromecastPingController) Run() error {
 func (t *ChromecastPingController) Ping() error {
 	payload := `{"type": "PING"}`
 
-	cm := cast_channel.CastMessage{
-		ProtocolVersion: cast_channel.CastMessage_CASTV2_1_0.Enum(),
+	cm := castchannel.CastMessage{
+		ProtocolVersion: castchannel.CastMessage_CASTV2_1_0.Enum(),
 		SourceId:        &defaultSource,
 		DestinationId:   &defaultDestination,
 		Namespace:       &pingNamespace,
-		PayloadType:     cast_channel.CastMessage_STRING.Enum(),
+		PayloadType:     castchannel.CastMessage_STRING.Enum(),
 		PayloadUtf8:     &payload,
 	}
 
@@ -99,12 +104,12 @@ func (t *ChromecastPingController) Ping() error {
 func (t *ChromecastPingController) Pong() error {
 	payload := `{"type": "PONG"}`
 
-	cm := cast_channel.CastMessage{
-		ProtocolVersion: cast_channel.CastMessage_CASTV2_1_0.Enum(),
+	cm := castchannel.CastMessage{
+		ProtocolVersion: castchannel.CastMessage_CASTV2_1_0.Enum(),
 		SourceId:        &defaultSource,
 		DestinationId:   &defaultDestination,
 		Namespace:       &pingNamespace,
-		PayloadType:     cast_channel.CastMessage_STRING.Enum(),
+		PayloadType:     castchannel.CastMessage_STRING.Enum(),
 		PayloadUtf8:     &payload,
 	}
 

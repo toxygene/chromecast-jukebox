@@ -1,9 +1,9 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
 	"io"
 
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -39,7 +39,7 @@ func (t *Chromecast) Run() error {
 	for _, c := range t.controllers {
 		toChromecastChannel, _ := c.GetChannels()
 
-		func(toChromecastChannel <-chan *cast_channel.CastMessage) {
+		func(toChromecastChannel <-chan *castchannel.CastMessage) {
 			tb.Go(func() error {
 				for {
 					cm, ok := <-toChromecastChannel

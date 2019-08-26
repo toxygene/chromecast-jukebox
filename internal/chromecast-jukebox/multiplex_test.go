@@ -1,22 +1,22 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 func TestMultiplex(t *testing.T) {
-	toChromecastChannel := make(chan *cast_channel.CastMessage)
-	fromControllerOneChannel := make(chan *cast_channel.CastMessage)
-	fromControllerTwoChannel := make(chan *cast_channel.CastMessage)
+	toChromecastChannel := make(chan *castchannel.CastMessage)
+	fromControllerOneChannel := make(chan *castchannel.CastMessage)
+	fromControllerTwoChannel := make(chan *castchannel.CastMessage)
 
-	fromControllerChannels := []<-chan *cast_channel.CastMessage{fromControllerOneChannel, fromControllerTwoChannel}
+	fromControllerChannels := []<-chan *castchannel.CastMessage{fromControllerOneChannel, fromControllerTwoChannel}
 
-	cm1 := cast_channel.CastMessage{}
-	cm2 := cast_channel.CastMessage{}
+	cm1 := castchannel.CastMessage{}
+	cm2 := castchannel.CastMessage{}
 
 	wg := sync.WaitGroup{}
 

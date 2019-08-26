@@ -1,10 +1,10 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 type controller interface {
-	GetChannels() (<-chan *cast_channel.CastMessage, chan<- *cast_channel.CastMessage)
+	GetChannels() (<-chan *castchannel.CastMessage, chan<- *castchannel.CastMessage)
 	Run() error
 }

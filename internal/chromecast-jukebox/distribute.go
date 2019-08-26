@@ -1,18 +1,18 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
 	"github.com/pkg/errors"
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 	"gopkg.in/tomb.v2"
 )
 
-func Distribute(fromChomecastChannel <-chan *cast_channel.CastMessage, toControllerChannels []chan<- *cast_channel.CastMessage) error {
+func Distribute(fromChomecastChannel <-chan *castchannel.CastMessage, toControllerChannels []chan<- *castchannel.CastMessage) error {
 	for cm := range fromChomecastChannel {
-		err := func(cm *cast_channel.CastMessage) error {
+		err := func(cm *castchannel.CastMessage) error {
 			tb := tomb.Tomb{}
 
 			for _, toControllerChannel := range toControllerChannels {
-				func(toControllerChannel chan<- *cast_channel.CastMessage) {
+				func(toControllerChannel chan<- *castchannel.CastMessage) {
 					tb.Go(func() error {
 						toControllerChannel <- cm
 

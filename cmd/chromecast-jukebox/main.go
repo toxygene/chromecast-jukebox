@@ -5,7 +5,7 @@ import (
 	"flag"
 	"os"
 
-	chromecast_jukebox "github.com/toxygene/chromecast-jukebox/internal/chromecast-jukebox"
+	"github.com/toxygene/chromecast-jukebox/internal/chromecast-jukebox"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sirupsen/logrus"
@@ -31,7 +31,7 @@ func main() {
 		panic(err)
 	}
 
-	c := chromecast_jukebox.NewChromecast(conn, logrus.NewEntry(logger))
+	c := chromecastjukebox.NewChromecast(conn, logrus.NewEntry(logger))
 
 	if err := c.Run(); err != nil {
 		panic(err)

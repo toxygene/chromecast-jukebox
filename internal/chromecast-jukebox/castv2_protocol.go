@@ -1,4 +1,4 @@
-package chromecast_jukebox
+package chromecastjukebox
 
 import (
 	"encoding/binary"
@@ -7,10 +7,10 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/pkg/errors"
-	cast_channel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
-func WriteCastMessage(w io.Writer, message *cast_channel.CastMessage) error {
+func WriteCastMessage(w io.Writer, message *castchannel.CastMessage) error {
 	b, err := proto.Marshal(message)
 
 	if err != nil {
@@ -30,7 +30,7 @@ func WriteCastMessage(w io.Writer, message *cast_channel.CastMessage) error {
 	return nil
 }
 
-func ReadCastMessage(r io.Reader) (*cast_channel.CastMessage, error) {
+func ReadCastMessage(r io.Reader) (*castchannel.CastMessage, error) {
 	var expectedMessageLength uint32
 
 	if err := binary.Read(r, binary.BigEndian, &expectedMessageLength); err != nil {
@@ -50,7 +50,7 @@ func ReadCastMessage(r io.Reader) (*cast_channel.CastMessage, error) {
 			return nil, errors.New("message length mismatch")
 		}
 
-		castMessage := &cast_channel.CastMessage{}
+		castMessage := &castchannel.CastMessage{}
 
 		if err := proto.Unmarshal(message, castMessage); err != nil {
 			return nil, errors.Wrap(err, "unmarshal message failed")
@@ -62,7 +62,7 @@ func ReadCastMessage(r io.Reader) (*cast_channel.CastMessage, error) {
 	return nil, nil
 }
 
-func GetCastMessagePayload(cm *cast_channel.CastMessage, payload *map[string]string) error {
+func GetCastMessagePayload(cm *castchannel.CastMessage, payload *map[string]string) error {
 	if err := json.Unmarshal([]byte(*cm.PayloadUtf8), payload); err != nil {
 		return errors.Wrap(err, "unmarshal payload failed")
 	}
