@@ -4,8 +4,11 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"sync"
+	"time"
 
-	"github.com/toxygene/chromecast-jukebox/internal/chromecast-jukebox"
+	chromecastjukebox "github.com/toxygene/chromecast-jukebox/internal/chromecast-jukebox"
+	"gopkg.in/tomb.v2"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/sirupsen/logrus"
@@ -33,7 +36,37 @@ func main() {
 
 	c := chromecastjukebox.NewChromecast(conn, logrus.NewEntry(logger))
 
-	if err := c.Run(); err != nil {
+	t := tomb.Tomb{}
+	wg := sync.WaitGroup{}
+
+	t.Go(func() error {
+		if err := c.Run(&wg); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	{
+		done := make(chan interface{})
+		t.Go(func() error {
+			wg.Wait()
+
+			t := time.NewTicker(5 * time.Second)
+			for {
+				select {
+				case <-done:
+					return nil
+				case <-t.C:
+					c.HeartbeatController.Ping()
+				}
+			}
+		})
+	}
+
+	// custom controller handling
+
+	if err := t.Wait(); err != nil {
 		panic(err)
 	}
 

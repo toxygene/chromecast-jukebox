@@ -1,13 +1,11 @@
 package chromecastjukebox
 
 import (
-	"time"
-
-	"github.com/oklog/run"
-
-	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
+	"encoding/json"
 
 	"github.com/pkg/errors"
+
+	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 var (
@@ -16,74 +14,38 @@ var (
 
 // ChromecastPingController handles the ping/pong operations for a Chromecast communication session
 type ChromecastPingController struct {
-	pingTimer *time.Timer
-	reader    chan *castchannel.CastMessage
-	writer    chan *castchannel.CastMessage
+	toChromecastReader castchannel.Reader
+	toChromecastWriter castchannel.Writer
 }
 
-// NewChromecastPingController constructs a ChromecastPingController, using the supplied channels for reading from and writing to the Chromecast
-func NewChromecastPingController(r chan *castchannel.CastMessage, w chan *castchannel.CastMessage) *ChromecastPingController {
+// NewChromecastPingController creates a ChromecastPingController with a castchannel pipe for communication
+func NewChromecastPingController() *ChromecastPingController {
+	r, w := castchannel.Pipe()
+
+	return NewChromecastPingControllerWithReaderWriter(r, w)
+}
+
+// NewChromecastPingControllerWithReaderWriter creates a ChromecastPingController using the supplied castchannel reader and writer for communication
+func NewChromecastPingControllerWithReaderWriter(r castchannel.Reader, w castchannel.Writer) *ChromecastPingController {
 	return &ChromecastPingController{
-		pingTimer: time.NewTimer(5 * time.Second),
-		reader:    r,
-		writer:    w,
+		toChromecastReader: r,
+		toChromecastWriter: w,
 	}
 }
 
-// GetChannels returns the controllers read from and write to Chromecast channels
-func (t *ChromecastPingController) GetChannels() (<-chan *castchannel.CastMessage, chan<- *castchannel.CastMessage) {
-	return t.reader, t.writer
+func (t *ChromecastPingController) Read(cm *castchannel.CastMessage) error {
+	return t.toChromecastReader.Read(cm)
 }
 
-// Close closes the read from and write to Chromecast channels
-func (t *ChromecastPingController) Close() error {
-	close(t.reader)
-	close(t.writer)
+func (t *ChromecastPingController) Write(cm *castchannel.CastMessage) error {
+	var payload map[string]string
 
-	return nil
-}
-
-// Run causes the controller to listen for PING and PONG payloads and periodicly sends PING payloads to the Chromecast
-func (t *ChromecastPingController) Run() error {
-	g := run.Group{}
-
-	g.Add(func() error {
-		for {
-			cm, ok := <-t.reader
-			if !ok {
-				return nil
-			}
-
-			var payload map[string]string
-
-			if err := GetCastMessagePayload(cm, &payload); err != nil {
-				return errors.Wrap(err, "")
-			}
-
-			if payload["type"] == "PING" {
-				if err := t.Pong(); err != nil {
-					return errors.Wrap(err, "")
-				}
-			}
-		}
-	}, func(error) {
-		close(t.reader)
-	})
-
-	g.Add(func() error {
-		for {
-			<-t.pingTimer.C
-
-			if err := t.Ping(); err != nil {
-				return errors.Wrap(err, "")
-			}
-		}
-	}, func(error) {
-		t.pingTimer.Stop()
-	})
-
-	if err := g.Run(); err != nil {
+	if err := json.Unmarshal([]byte(*cm.PayloadUtf8), &payload); err != nil {
 		return errors.Wrap(err, "")
+	}
+
+	if payload["type"] == "PING" {
+		t.Pong()
 	}
 
 	return nil
@@ -102,7 +64,9 @@ func (t *ChromecastPingController) Ping() error {
 		PayloadUtf8:     &payload,
 	}
 
-	t.writer <- &cm
+	if err := t.toChromecastWriter.Write(&cm); err != nil {
+		return errors.Wrap(err, "")
+	}
 
 	return nil
 }
@@ -120,7 +84,9 @@ func (t *ChromecastPingController) Pong() error {
 		PayloadUtf8:     &payload,
 	}
 
-	t.writer <- &cm
+	if err := t.toChromecastWriter.Write(&cm); err != nil {
+		return errors.Wrap(err, "")
+	}
 
 	return nil
 }

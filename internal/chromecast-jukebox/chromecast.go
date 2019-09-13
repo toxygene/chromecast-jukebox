@@ -5,10 +5,9 @@ import (
 	"sync"
 
 	"github.com/oklog/run"
-	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
-
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	castchannel "github.com/toxygene/chromecast-jukebox/internal/cast-channel"
 )
 
 var (
@@ -17,81 +16,88 @@ var (
 )
 
 type Chromecast struct {
-	controllers []controller
+	ConnectionController *ChromecastConnectController
+	HeartbeatController  *ChromecastPingController
+
+	connection  castchannel.ReadWriter
+	controllers []castchannel.ReadWriter
 	logEntry    *logrus.Entry
-	connection  io.ReadWriteCloser
 }
 
-func NewChromecast(connection io.ReadWriteCloser, logEntry *logrus.Entry) *Chromecast {
-	c := Chromecast{
-		controllers: []controller{},
-		logEntry:    logEntry,
-		connection:  connection,
+func NewChromecast(connection io.ReadWriter, logEntry *logrus.Entry) *Chromecast {
+	connectionController := NewChromecastConnectController()
+	heartbeatController := NewChromecastPingController()
+
+	return &Chromecast{
+		ConnectionController: connectionController,
+		HeartbeatController:  heartbeatController,
+		connection:           castchannel.NewIoReadWriter(connection),
+		controllers: []castchannel.ReadWriter{
+			connectionController,
+			heartbeatController,
+		},
+		logEntry: logEntry,
 	}
-
-	// register default controllers
-
-	return &c
 }
 
-func (t *Chromecast) Close() error {
-	if err := t.connection.Close(); err != nil {
+func (t *Chromecast) RegisterController(c castchannel.ReadWriter) {
+	t.controllers = append(t.controllers, c)
+}
+
+func (t *Chromecast) Run(ready *sync.WaitGroup) error {
+	if err := t.ConnectionController.Connect(); err != nil {
 		return errors.Wrap(err, "")
 	}
 
-	return nil
-}
-
-func (t *Chromecast) Run() error {
 	g := run.Group{}
 
-	writeLock := sync.Mutex{}
-	for _, c := range t.controllers {
-		toChromecastChannel, _ := c.GetChannels()
+	{
+		g.Add(func() error {
+			var cm castchannel.CastMessage
+			for {
+				if err := t.connection.Read(&cm); err != nil {
+					return errors.Wrap(err, "")
+				}
 
-		func(toChromecastChannel <-chan *castchannel.CastMessage) {
-			g.Add(func() error {
-				for {
-					cm, ok := <-toChromecastChannel
-
-					if !ok {
-						return nil
-					}
-
-					writeLock.Lock()
-
-					if err := WriteCastMessage(t.connection, cm); err != nil {
-						writeLock.Unlock()
+				for _, c := range t.controllers {
+					if err := c.Write(&cm); err != nil {
 						return errors.Wrap(err, "")
 					}
-
-					writeLock.Unlock()
 				}
-			}, func(error) {
-				c.Close()
-			})
-		}(toChromecastChannel)
+			}
+		}, func(error) {
+
+		})
 	}
 
-	g.Add(func() error {
-		for {
-			cm, err := ReadCastMessage(t.connection)
+	{
+		for _, c := range t.controllers {
+			g.Add(func() error {
+				for {
+					err := func(c castchannel.ReadWriter) error {
+						var cm castchannel.CastMessage
+						for {
+							if err := c.Read(&cm); err != nil {
+								return errors.Wrap(err, "")
+							}
 
-			if err != nil {
-				return errors.Wrap(err, "")
-			}
+							if err := t.connection.Write(&cm); err != nil {
+								return errors.Wrap(err, "")
+							}
+						}
+					}(c)
 
-			for _, c := range t.controllers {
-				func(c controller) {
-					_, fromChromecastChannel := c.GetChannels()
+					if err != nil {
+						return err
+					}
+				}
+			}, func(error) {
 
-					fromChromecastChannel <- cm
-				}(c)
-			}
+			})
 		}
-	}, func(error) {
-		t.Close()
-	})
+	}
+
+	ready.Done()
 
 	if err := g.Run(); err != nil {
 		return errors.Wrap(err, "")
