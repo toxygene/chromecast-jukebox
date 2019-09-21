@@ -10,25 +10,25 @@ var (
 )
 
 type ChromecastConnectController struct {
-	fromChromecastReader castchannel.Reader
+	fromControllerReader castchannel.Reader
 	toChromecastWriter   castchannel.Writer
 }
 
 func NewChromecastConnectController() *ChromecastConnectController {
-	fromChromecastReader, toChromecastWriter := castchannel.Pipe()
+	fromControllerReader, toChromecastWriter := castchannel.Pipe()
 
-	return NewChromecastConnectControllerWithReaderWriter(fromChromecastReader, toChromecastWriter)
+	return NewChromecastConnectControllerWithReaderWriter(fromControllerReader, toChromecastWriter)
 }
 
-func NewChromecastConnectControllerWithReaderWriter(fromChromecastReader castchannel.Reader, toChromecastWriter castchannel.Writer) *ChromecastConnectController {
+func NewChromecastConnectControllerWithReaderWriter(fromControllerReader castchannel.Reader, toChromecastWriter castchannel.Writer) *ChromecastConnectController {
 	return &ChromecastConnectController{
-		fromChromecastReader: fromChromecastReader,
+		fromControllerReader: fromControllerReader,
 		toChromecastWriter:   toChromecastWriter,
 	}
 }
 
 func (t *ChromecastConnectController) Read(cm *castchannel.CastMessage) error {
-	return t.fromChromecastReader.Read(cm)
+	return t.fromControllerReader.Read(cm)
 }
 
 func (t *ChromecastConnectController) Write(cm *castchannel.CastMessage) error {
@@ -42,7 +42,7 @@ func (t *ChromecastConnectController) Connect() error {
 		ProtocolVersion: castchannel.CastMessage_CASTV2_1_0.Enum(),
 		SourceId:        &defaultSource,
 		DestinationId:   &defaultDestination,
-		Namespace:       &pingNamespace,
+		Namespace:       &connectNamespace,
 		PayloadType:     castchannel.CastMessage_STRING.Enum(),
 		PayloadUtf8:     &payload,
 	}
@@ -61,7 +61,7 @@ func (t *ChromecastConnectController) Close() error {
 		ProtocolVersion: castchannel.CastMessage_CASTV2_1_0.Enum(),
 		SourceId:        &defaultSource,
 		DestinationId:   &defaultDestination,
-		Namespace:       &pingNamespace,
+		Namespace:       &connectNamespace,
 		PayloadType:     castchannel.CastMessage_STRING.Enum(),
 		PayloadUtf8:     &payload,
 	}

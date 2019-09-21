@@ -1,6 +1,7 @@
 package chromecastjukebox
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,14 +13,20 @@ func TestConnect(t *testing.T) {
 
 	c := NewChromecastConnectControllerWithReaderWriter(r, w)
 
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
 	go func() {
 		assert.NoError(t, c.Connect())
+		wg.Done()
 	}()
 
 	var cm castchannel.CastMessage
 
 	assert.NoError(t, c.Read(&cm))
 	assert.Equal(t, `{"type": "CONNECT"}`, *cm.PayloadUtf8)
+
+	wg.Wait()
 }
 
 func TestClose(t *testing.T) {
@@ -27,14 +34,20 @@ func TestClose(t *testing.T) {
 
 	c := NewChromecastConnectControllerWithReaderWriter(r, w)
 
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
 	go func() {
 		assert.NoError(t, c.Close())
+		wg.Done()
 	}()
 
 	var cm castchannel.CastMessage
 
 	assert.NoError(t, c.Read(&cm))
 	assert.Equal(t, `{"type": "CLOSE"}`, *cm.PayloadUtf8)
+
+	wg.Wait()
 }
 
 func TestRead(t *testing.T) {
@@ -42,12 +55,18 @@ func TestRead(t *testing.T) {
 
 	c := NewChromecastConnectControllerWithReaderWriter(r, w)
 
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
 	go func() {
 		assert.NoError(t, c.Connect())
+		wg.Done()
 	}()
 
 	var cm castchannel.CastMessage
 
 	assert.NoError(t, c.Read(&cm))
 	assert.Equal(t, `{"type": "CONNECT"}`, *cm.PayloadUtf8)
+
+	wg.Wait()
 }

@@ -5,7 +5,8 @@ type pipeCastMessageReader struct {
 }
 
 func (t *pipeCastMessageReader) Read(cm *CastMessage) error {
-	*cm = *(<-t.c)
+	tempCM := <-t.c
+	*cm = *tempCM
 	return nil
 }
 

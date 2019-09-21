@@ -1,16 +1,16 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
 	"sync"
-	"time"
 
+	"github.com/pkg/errors"
 	chromecastjukebox "github.com/toxygene/chromecast-jukebox/internal/chromecast-jukebox"
-	"gopkg.in/tomb.v2"
 
-	"github.com/davecgh/go-spew/spew"
+	"github.com/oklog/run"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,44 +31,97 @@ func main() {
 
 	conn, err := tls.Dial("tcp", *addr, &tls.Config{InsecureSkipVerify: true}) // todo
 	if err != nil {
-		panic(err)
+		logger.WithError(err).
+			Error("could not connect to Chromecast device")
+
+		os.Exit(1)
 	}
 
 	c := chromecastjukebox.NewChromecast(conn, logrus.NewEntry(logger))
 
-	t := tomb.Tomb{}
-	wg := sync.WaitGroup{}
+	g := run.Group{}
+	parentCtx := context.Background()
+	chromecastReady := sync.WaitGroup{}
+	chromecastReady.Add(1)
 
-	t.Go(func() error {
-		if err := c.Run(&wg); err != nil {
-			return err
-		}
-
-		return nil
-	})
-
+	// Run the chromecast
 	{
-		done := make(chan interface{})
-		t.Go(func() error {
-			wg.Wait()
+		g.Add(func() error {
+			logger.Trace("running chromecast")
 
-			t := time.NewTicker(5 * time.Second)
-			for {
-				select {
-				case <-done:
-					return nil
-				case <-t.C:
-					c.HeartbeatController.Ping()
-				}
+			if err := c.Run(parentCtx, &chromecastReady); err != nil {
+				logger.WithError(err).
+					Error("error running chromecast")
+
+				return errors.Wrap(err, "error running chromecast")
 			}
+
+			return nil
+		}, func(err error) {
+			logger.WithError(err).
+				Info("interupting chromecast run")
+
+			//c.Close() // todo
+		})
+	}
+
+	// Handle OS interupt
+	// {
+	// 	ctx, cancel := context.WithCancel(parentCtx)
+	// 	g.Add(func() error {
+	// 		s := make(chan os.Signal, 1)
+	// 		signal.Notify(s, os.Interrupt)
+
+	// 		select {
+	// 		case <-ctx.Done():
+	// 			return nil
+	// 		case <-s:
+	// 			logger.Trace("os interupt handler waiting for chromecast connection to be ready")
+
+	// 			chromecastConnectionReady.Wait()
+
+	// 			if err := c.ConnectionController.Close(); err != nil {
+	// 				logger.WithError(err).
+	// 					Error("error closing chromecast connection")
+
+	// 				return errors.Wrap(err, "error closing chromecast connection")
+	// 			}
+
+	// 			return nil
+	// 		}
+	// 	}, func(error) {
+	// 		logger.WithError(err).
+	// 			Error("intertupting os interupt handler")
+
+	// 		cancel()
+	// 	})
+	// }
+
+	// Do a thing
+	{
+		ctx, cancel := context.WithCancel(parentCtx)
+		g.Add(func() error {
+			chromecastReady.Wait()
+
+			c.ReceiverController.Launch("CC1AD845")
+
+			<-ctx.Done()
+
+			return nil
+		}, func(err error) {
+			logger.WithError(err).
+				Error("interupting this thing")
+
+			cancel()
 		})
 	}
 
 	// custom controller handling
 
-	if err := t.Wait(); err != nil {
-		panic(err)
-	}
+	if err := g.Run(); err != nil {
+		logger.WithError(err).
+			Error("error running jukebox")
 
-	spew.Dump(c)
+		os.Exit(2)
+	}
 }
