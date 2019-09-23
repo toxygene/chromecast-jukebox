@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	pingNamespace = "urn:cast-cast:com.google.cast.tp.heartbeat"
+	pingNamespace = "urn:x-cast:com.google.cast.tp.heartbeat"
 )
 
 // ChromecastPingController handles the ping/pong operations for a Chromecast communication session
 type ChromecastPingController struct {
-	toChromecastReader castchannel.Reader
-	toChromecastWriter castchannel.Writer
+	toChromecastReader castchannel.ReadCloser
+	toChromecastWriter castchannel.WriteCloser
 }
 
 // NewChromecastPingController creates a ChromecastPingController with a castchannel pipe for communication
@@ -26,11 +26,22 @@ func NewChromecastPingController() *ChromecastPingController {
 }
 
 // NewChromecastPingControllerWithReaderWriter creates a ChromecastPingController using the supplied castchannel reader and writer for communication
-func NewChromecastPingControllerWithReaderWriter(r castchannel.Reader, w castchannel.Writer) *ChromecastPingController {
+func NewChromecastPingControllerWithReaderWriter(r castchannel.ReadCloser, w castchannel.WriteCloser) *ChromecastPingController {
 	return &ChromecastPingController{
 		toChromecastReader: r,
 		toChromecastWriter: w,
 	}
+}
+
+func (t *ChromecastPingController) Close() error {
+	rErr := t.toChromecastReader.Close()
+	wErr := t.toChromecastWriter.Close()
+
+	if rErr != nil || wErr != nil {
+		return nil // todo
+	}
+
+	return nil
 }
 
 func (t *ChromecastPingController) Read(cm *castchannel.CastMessage) error {
@@ -38,10 +49,14 @@ func (t *ChromecastPingController) Read(cm *castchannel.CastMessage) error {
 }
 
 func (t *ChromecastPingController) Write(cm *castchannel.CastMessage) error {
+	if cm.GetNamespace() != pingNamespace {
+		return nil
+	}
+
 	var payload map[string]string
 
 	if err := json.Unmarshal([]byte(*cm.PayloadUtf8), &payload); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error unmarshaling message")
 	}
 
 	if payload["type"] == "PING" {
@@ -65,7 +80,7 @@ func (t *ChromecastPingController) Ping() error {
 	}
 
 	if err := t.toChromecastWriter.Write(&cm); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error writing ping message to chromecast")
 	}
 
 	return nil
@@ -85,7 +100,7 @@ func (t *ChromecastPingController) Pong() error {
 	}
 
 	if err := t.toChromecastWriter.Write(&cm); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error writing pong message to chromecast")
 	}
 
 	return nil

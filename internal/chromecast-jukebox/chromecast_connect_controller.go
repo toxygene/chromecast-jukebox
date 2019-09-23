@@ -10,8 +10,8 @@ var (
 )
 
 type ChromecastConnectController struct {
-	fromControllerReader castchannel.Reader
-	toChromecastWriter   castchannel.Writer
+	fromControllerReader castchannel.ReadCloser
+	toChromecastWriter   castchannel.WriteCloser
 }
 
 func NewChromecastConnectController() *ChromecastConnectController {
@@ -20,11 +20,22 @@ func NewChromecastConnectController() *ChromecastConnectController {
 	return NewChromecastConnectControllerWithReaderWriter(fromControllerReader, toChromecastWriter)
 }
 
-func NewChromecastConnectControllerWithReaderWriter(fromControllerReader castchannel.Reader, toChromecastWriter castchannel.Writer) *ChromecastConnectController {
+func NewChromecastConnectControllerWithReaderWriter(fromControllerReader castchannel.ReadCloser, toChromecastWriter castchannel.WriteCloser) *ChromecastConnectController {
 	return &ChromecastConnectController{
 		fromControllerReader: fromControllerReader,
 		toChromecastWriter:   toChromecastWriter,
 	}
+}
+
+func (t *ChromecastConnectController) Close() error {
+	rErr := t.fromControllerReader.Close()
+	wErr := t.toChromecastWriter.Close()
+
+	if rErr != nil || wErr != nil {
+		return nil // todo
+	}
+
+	return nil
 }
 
 func (t *ChromecastConnectController) Read(cm *castchannel.CastMessage) error {
@@ -48,13 +59,13 @@ func (t *ChromecastConnectController) Connect() error {
 	}
 
 	if err := t.toChromecastWriter.Write(&cm); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error writing connect message to chromecast")
 	}
 
 	return nil
 }
 
-func (t *ChromecastConnectController) Close() error {
+func (t *ChromecastConnectController) Disconnect() error {
 	payload := `{"type": "CLOSE"}`
 
 	cm := castchannel.CastMessage{
@@ -67,7 +78,7 @@ func (t *ChromecastConnectController) Close() error {
 	}
 
 	if err := t.toChromecastWriter.Write(&cm); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error writing close message to chromecast")
 	}
 
 	return nil

@@ -12,8 +12,8 @@ var (
 )
 
 type ChromecastReceiverController struct {
-	toChromecastReader castchannel.Reader
-	toChromecastWriter castchannel.Writer
+	toChromecastReader castchannel.ReadCloser
+	toChromecastWriter castchannel.WriteCloser
 }
 
 // NewChromecastPingController creates a ChromecastPingController with a castchannel pipe for communication
@@ -23,11 +23,22 @@ func NewChromecastReceiverController() *ChromecastReceiverController {
 	return NewChromecastReceiverControllerWithReaderWriter(r, w)
 }
 
-func NewChromecastReceiverControllerWithReaderWriter(r castchannel.Reader, w castchannel.Writer) *ChromecastReceiverController {
+func NewChromecastReceiverControllerWithReaderWriter(r castchannel.ReadCloser, w castchannel.WriteCloser) *ChromecastReceiverController {
 	return &ChromecastReceiverController{
 		toChromecastReader: r,
 		toChromecastWriter: w,
 	}
+}
+
+func (t *ChromecastReceiverController) Close() error {
+	rErr := t.toChromecastReader.Close()
+	wErr := t.toChromecastWriter.Close()
+
+	if rErr != nil || wErr != nil {
+		return nil // todo
+	}
+
+	return nil
 }
 
 func (t *ChromecastReceiverController) Read(cm *castchannel.CastMessage) error {
@@ -35,6 +46,10 @@ func (t *ChromecastReceiverController) Read(cm *castchannel.CastMessage) error {
 }
 
 func (t *ChromecastReceiverController) Write(cm *castchannel.CastMessage) error {
+	if cm.GetNamespace() != receiverNamespace {
+		return nil
+	}
+
 	// var payload map[string]string
 
 	// if err := json.Unmarshal([]byte(*cm.PayloadUtf8), &payload); err != nil {
@@ -62,7 +77,7 @@ func (t *ChromecastReceiverController) Launch(appID string) error {
 	}
 
 	if err := t.toChromecastWriter.Write(&cm); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error writing launch to chromecast")
 	}
 
 	return nil

@@ -4,6 +4,12 @@ type pipeCastMessageReader struct {
 	c chan *CastMessage
 }
 
+func (t *pipeCastMessageReader) Close() error {
+	close(t.c)
+
+	return nil
+}
+
 func (t *pipeCastMessageReader) Read(cm *CastMessage) error {
 	tempCM := <-t.c
 	*cm = *tempCM
@@ -12,6 +18,12 @@ func (t *pipeCastMessageReader) Read(cm *CastMessage) error {
 
 type pipeCastMessageWriter struct {
 	c chan *CastMessage
+}
+
+func (t *pipeCastMessageWriter) Close() error {
+	close(t.c)
+
+	return nil
 }
 
 func (t *pipeCastMessageWriter) Write(cm *CastMessage) error {

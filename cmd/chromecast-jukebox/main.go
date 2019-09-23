@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"os/signal"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -49,7 +50,7 @@ func main() {
 		g.Add(func() error {
 			logger.Trace("running chromecast")
 
-			if err := c.Run(parentCtx, &chromecastReady); err != nil {
+			if err := c.Run(&chromecastReady); err != nil {
 				logger.WithError(err).
 					Error("error running chromecast")
 
@@ -61,41 +62,44 @@ func main() {
 			logger.WithError(err).
 				Info("interupting chromecast run")
 
-			//c.Close() // todo
+			c.Close()
 		})
 	}
 
 	// Handle OS interupt
-	// {
-	// 	ctx, cancel := context.WithCancel(parentCtx)
-	// 	g.Add(func() error {
-	// 		s := make(chan os.Signal, 1)
-	// 		signal.Notify(s, os.Interrupt)
+	{
+		ctx, cancel := context.WithCancel(parentCtx)
+		g.Add(func() error {
+			s := make(chan os.Signal, 1)
+			signal.Notify(s, os.Interrupt)
 
-	// 		select {
-	// 		case <-ctx.Done():
-	// 			return nil
-	// 		case <-s:
-	// 			logger.Trace("os interupt handler waiting for chromecast connection to be ready")
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-s:
+				if err := c.ConnectionController.Close(); err != nil {
+					logger.WithError(err).
+						Error("error closing chromecast connection")
 
-	// 			chromecastConnectionReady.Wait()
+					return errors.Wrap(err, "error closing chromecast connection")
+				}
 
-	// 			if err := c.ConnectionController.Close(); err != nil {
-	// 				logger.WithError(err).
-	// 					Error("error closing chromecast connection")
+				if err := c.Close(); err != nil {
+					logger.WithError(err).
+						Error("error closing chromecast")
 
-	// 				return errors.Wrap(err, "error closing chromecast connection")
-	// 			}
+					return errors.Wrap(err, "error closing chromecast")
+				}
 
-	// 			return nil
-	// 		}
-	// 	}, func(error) {
-	// 		logger.WithError(err).
-	// 			Error("intertupting os interupt handler")
+				return nil
+			}
+		}, func(error) {
+			logger.WithError(err).
+				Error("intertupting os interupt handler")
 
-	// 		cancel()
-	// 	})
-	// }
+			cancel()
+		})
+	}
 
 	// Do a thing
 	{
@@ -107,7 +111,7 @@ func main() {
 
 			<-ctx.Done()
 
-			return nil
+			return ctx.Err()
 		}, func(err error) {
 			logger.WithError(err).
 				Error("interupting this thing")
@@ -122,6 +126,10 @@ func main() {
 		logger.WithError(err).
 			Error("error running jukebox")
 
+		conn.Close()
+
 		os.Exit(2)
 	}
+
+	conn.Close()
 }

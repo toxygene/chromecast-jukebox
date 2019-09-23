@@ -17,21 +17,36 @@ type Writer interface {
 	Write(*CastMessage) error
 }
 
-type ReadWriter interface {
-	Reader
-	Writer
+type Closer interface {
+	Close() error
 }
 
-type IoReader struct {
-	r io.Reader
+type ReadCloser interface {
+	Reader
+	Closer
+}
+
+type WriteCloser interface {
+	Writer
+	Closer
+}
+
+type ReadWriteCloser interface {
+	Reader
+	Writer
+	Closer
+}
+
+type IoReadCloser struct {
+	r io.ReadCloser
 	l *logrus.Entry
 }
 
-func NewIoReader(r io.Reader, l *logrus.Entry) *IoReader {
-	return &IoReader{r, l}
+func NewIoReadCloser(r io.ReadCloser, l *logrus.Entry) *IoReadCloser {
+	return &IoReadCloser{r, l}
 }
 
-func (t *IoReader) Read(cm *CastMessage) error {
+func (t *IoReadCloser) Read(cm *CastMessage) error {
 	var expectedMessageLength uint32
 
 	t.l.Info("reading expected message length from reader")
@@ -86,16 +101,16 @@ func (t *IoReader) Read(cm *CastMessage) error {
 	return nil
 }
 
-type IoWriter struct {
-	w io.Writer
+type IoWriteCloser struct {
+	w io.WriteCloser
 	l *logrus.Entry
 }
 
-func NewIoWriter(w io.Writer, l *logrus.Entry) *IoWriter {
-	return &IoWriter{w, l}
+func NewIoWriteCloser(w io.WriteCloser, l *logrus.Entry) *IoWriteCloser {
+	return &IoWriteCloser{w, l}
 }
 
-func (t *IoWriter) Write(cm *CastMessage) error {
+func (t *IoWriteCloser) Write(cm *CastMessage) error {
 	l := t.l.WithField("message", cm.String())
 
 	l.Trace("marshaling protobuf message")
@@ -133,14 +148,25 @@ func (t *IoWriter) Write(cm *CastMessage) error {
 	return nil
 }
 
-type IoReadWriter struct {
-	IoReader
-	IoWriter
+type IoReadWriteCloser struct {
+	IoReadCloser
+	IoWriteCloser
 }
 
-func NewIoReadWriter(rw io.ReadWriter, l *logrus.Entry) *IoReadWriter {
-	return &IoReadWriter{
-		IoReader{rw, l},
-		IoWriter{rw, l},
+func NewIoReadWriteCloser(rw io.ReadWriteCloser, l *logrus.Entry) *IoReadWriteCloser {
+	return &IoReadWriteCloser{
+		IoReadCloser{rw, l},
+		IoWriteCloser{rw, l},
 	}
+}
+
+func (t *IoReadWriteCloser) Close() error {
+	rErr := t.r.Close()
+	wErr := t.w.Close()
+
+	if rErr != nil || wErr != nil {
+		return nil // todo
+	}
+
+	return nil
 }

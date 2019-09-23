@@ -1,7 +1,6 @@
 package chromecastjukebox
 
 import (
-	"context"
 	"io"
 	"sync"
 
@@ -21,12 +20,12 @@ type Chromecast struct {
 	HeartbeatController  *ChromecastPingController
 	ReceiverController   *ChromecastReceiverController
 
-	connection  castchannel.ReadWriter
-	controllers []castchannel.ReadWriter
+	connection  castchannel.ReadWriteCloser
+	controllers []castchannel.ReadWriteCloser
 	l           *logrus.Entry
 }
 
-func NewChromecast(c io.ReadWriter, l *logrus.Entry) *Chromecast {
+func NewChromecast(c io.ReadWriteCloser, l *logrus.Entry) *Chromecast {
 	connectionController := NewChromecastConnectController()
 	heartbeatController := NewChromecastPingController()
 	receiverController := NewChromecastReceiverController()
@@ -35,8 +34,8 @@ func NewChromecast(c io.ReadWriter, l *logrus.Entry) *Chromecast {
 		ConnectionController: connectionController,
 		HeartbeatController:  heartbeatController,
 		ReceiverController:   receiverController,
-		connection:           castchannel.NewIoReadWriter(c, l),
-		controllers: []castchannel.ReadWriter{
+		connection:           castchannel.NewIoReadWriteCloser(c, l),
+		controllers: []castchannel.ReadWriteCloser{
 			connectionController,
 			heartbeatController,
 			receiverController,
@@ -45,11 +44,22 @@ func NewChromecast(c io.ReadWriter, l *logrus.Entry) *Chromecast {
 	}
 }
 
-func (t *Chromecast) RegisterController(c castchannel.ReadWriter) {
+func (t *Chromecast) Close() error {
+	if err := t.ConnectionController.Disconnect(); err != nil {
+		t.l.WithError(err).
+			Error("error sending close command")
+
+		return errors.Wrap(err, "error sending close command")
+	}
+
+	return nil
+}
+
+func (t *Chromecast) RegisterController(c castchannel.ReadWriteCloser) {
 	t.controllers = append(t.controllers, c)
 }
 
-func (t *Chromecast) Run(parentCtx context.Context, ready *sync.WaitGroup) error {
+func (t *Chromecast) Run(ready *sync.WaitGroup) error {
 	g := run.Group{}
 
 	{
@@ -57,37 +67,49 @@ func (t *Chromecast) Run(parentCtx context.Context, ready *sync.WaitGroup) error
 			var cm castchannel.CastMessage
 			for {
 				if err := t.connection.Read(&cm); err != nil {
-					return errors.Wrap(err, "")
+					return errors.Wrap(err, "error reading message from chromecast")
 				}
 
 				for _, c := range t.controllers {
 					if err := c.Write(&cm); err != nil {
-						return errors.Wrap(err, "")
+						return errors.Wrap(err, "error writing message to chromecast")
 					}
 				}
 			}
-		}, func(error) {
-			// todo - close the connection
+		}, func(err error) {
+			t.l.WithError(err).
+				Error("interupting fan-out messages from chromecast")
+
+			t.connection.Close()
 		})
 	}
 
 	{
+		mutex := sync.Mutex{}
 		for _, c := range t.controllers {
-			func(c castchannel.ReadWriter) {
+
+			func(c castchannel.ReadWriteCloser) {
 				g.Add(func() error {
 					for {
 						var cm castchannel.CastMessage
 
 						if err := c.Read(&cm); err != nil {
-							return errors.Wrap(err, "")
+							return errors.Wrap(err, "error reading message from controller")
 						}
 
+						mutex.Lock()
 						if err := t.connection.Write(&cm); err != nil {
-							return errors.Wrap(err, "")
+							mutex.Unlock()
+							return errors.Wrap(err, "error writing message to chromecast")
 						}
+						mutex.Unlock()
 					}
-				}, func(error) {
-					// todo - close the controller
+				}, func(err error) {
+					t.l.WithField("controller", c).
+						WithError(err).
+						Error("intrupting fan-in messages from controller")
+
+					c.Close()
 				})
 			}(c)
 		}
@@ -95,58 +117,30 @@ func (t *Chromecast) Run(parentCtx context.Context, ready *sync.WaitGroup) error
 
 	// Send CONNECT
 	{
-		ctx, cancel := context.WithCancel(parentCtx)
+		done := make(chan interface{})
 		g.Add(func() error {
 			if err := t.ConnectionController.Connect(); err != nil {
-				return errors.Wrap(err, "")
+				t.l.WithError(err).
+					Error("error connecting")
+
+				return errors.Wrap(err, "error connecting")
 			}
 
 			ready.Done()
 
-			<-ctx.Done()
-
-			if err := t.ConnectionController.Close(); err != nil {
-				return errors.Wrap(err, "")
-			}
+			<-done
 
 			return nil
 		}, func(err error) {
 			t.l.WithError(err).
 				Error("interupting connect controller")
 
-			cancel()
+			done <- struct{}{}
 		})
 	}
 
-	// Send a PING every 5 seconds
-	// {
-	// 	ctx, cancel := context.WithCancel(parentCtx)
-	// 	g.Add(func() error {
-	// 		t.l.Trace("ping controller waiting for chromecast connection to be ready")
-
-	// 		ready.Wait()
-
-	// 		tick := time.NewTicker(5 * time.Second)
-	// 		for {
-	// 			select {
-	// 			case <-ctx.Done():
-	// 				return nil
-	// 			case <-tick.C:
-	// 				t.l.Trace("sending ping to chromecast")
-
-	// 				t.HeartbeatController.Ping()
-	// 			}
-	// 		}
-	// 	}, func(err error) {
-	// 		t.l.WithError(err).
-	// 			Error("intrupting ping controller timer")
-
-	// 		cancel()
-	// 	})
-	// }
-
 	if err := g.Run(); err != nil {
-		return errors.Wrap(err, "")
+		return errors.Wrap(err, "error running chromecast")
 	}
 
 	return nil
